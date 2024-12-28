@@ -1,170 +1,310 @@
-import tkinter as tk
+import wx
+import os
 import json
+import keyboard
+import pyperclip
 import random
 from hashlib import md5
-import pyperclip
 import requests
-import keyboard
+import webbrowser
 
 
-# 开启状态
-enabled = False
+panel_size = (400, 200)
+panel_add_settings_size = (400, 575)
+about_size = (550, 755)
+CONFIG_FILE = "config.json"
+custom_line_colour = "#d2d2d2"
+about = "v0.2.0  ·  帮助  ·  反馈  ·  赞助"
+about_title_text = "翻译助手 v0.2.0"
+about_developer = "iibob"
+about_email = 'iibobapp@gmail.com'
+third_party_library = "wxPython、keyboard、pyperclip、requests"
+help_url = "https://www.yuque.com/bo_o/box/pma7zu#PVjrc"
+project_url = "https://github.com/iibob/TranslateReplace"
+changelog_url = "https://www.yuque.com/bo_o/box/pma7zu#AGCCR"
 
 
-def main():
-    global enabled
-    # 加载设置
-    try:
-        with open("config.json", "r") as f:
-            saved_config = json.load(f)
-            config = {
-                'app_id': saved_config.get('app_id', ''),
-                'key': saved_config.get('key', ''),
-                'auto_start': saved_config.get('auto_start', False),
-                'shortcut': saved_config.get('shortcut', 'ctrl+shift+f')
+class Config:
+    @staticmethod
+    def load_config():
+        if not os.path.exists(CONFIG_FILE):
+            default_config = {
+                "app_id": "",
+                "secret_key": "",
+                "shortcut": "ctrl+shift+F",
+                "auto_start": False
             }
-    except FileNotFoundError:
-        config = {
-            'app_id': '',
-            'key': '',
-            'auto_start': False,
-            'shortcut': 'ctrl+shift+f'
-        }
-        with open("config.json", "w") as f:
-            json.dump(config, f)
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(default_config, f, indent=4)
+            return default_config
+        
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
 
-    def parse_shortcut(shortcut):
-        # 解析快捷键字符串并返回按键和字符
-        keys = shortcut.lower().split('+')
-        modifiers = []
-        char = ''
+    @staticmethod
+    def save_config(config):
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f, indent=4)
 
-        for key in keys:
-            if key == 'ctrl':
-                modifiers.append('ctrl')
-            elif key == 'shift':
-                modifiers.append('shift')
-            elif key == 'alt':
-                modifiers.append('alt')
-            else:
-                char = key
 
-        return modifiers, char
+class TranslatorFrame(wx.Frame):
+    def __init__(self):
+        super().__init__(parent=None, title="翻译助手", size=panel_size, style=wx.DEFAULT_FRAME_STYLE & ~(wx.RESIZE_BORDER | wx.MAXIMIZE_BOX))
 
-    def save_app_id_and_key():
-        config['app_id'] = app_id_entry.get()
-        config['key'] = key_entry.get()
+        # 设置窗口图标
+        if os.path.exists("icon.png"):
+            icon = wx.Icon("icon.png", wx.BITMAP_TYPE_PNG)
+            self.SetIcon(icon)
 
-        if config['app_id'] and config['key']:
-            with open("config.json", "r") as f:
-                saved_config = json.load(f)
+        # 加载配置
+        self.config = Config.load_config()
+        self.is_active = False
 
-            saved_config['app_id'] = config['app_id']
-            saved_config['key'] = config['key']
+        # 创建主面板
+        self.panel = wx.Panel(self)
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
 
-            with open("config.json", "w") as f:
-                json.dump(saved_config, f)
+        # 第一栏：按钮
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.start_btn = wx.Button(self.panel, label="开 启", size=(-1, 60))
+        self.settings_btn = wx.Button(self.panel, label="设置", size=(60, 60))
+        button_sizer.Add(self.start_btn, 1, wx.ALL | wx.EXPAND, 5)
+        button_sizer.Add(self.settings_btn, 0, wx.ALL | wx.EXPAND, 5)
+        main_sizer.AddSpacer(15)
+        main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 6)
+        main_sizer.AddSpacer(5)
 
-            show_message("已保存")
+        # 第二栏：自动开启选项
+        auto_start_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.auto_start = wx.CheckBox(self.panel, label="自动开启")
+        auto_start_sizer.Add(self.auto_start, 0, wx.LEFT | wx.RIGHT | wx.ALIGN_CENTER, 5)
+        main_sizer.Add(auto_start_sizer, 0, wx.ALIGN_CENTER)
+        main_sizer.AddSpacer(20)
+        self.auto_start.SetValue(self.config["auto_start"])
+
+        # 第三栏：设置区域
+        self.settings_panel = wx.Panel(self.panel)
+        settings_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # 百度翻译设置
+        baidu_box = wx.StaticBox(self.settings_panel, label="百度翻译")
+        baidu_sizer = wx.StaticBoxSizer(baidu_box, wx.VERTICAL)
+
+        # 输入框
+        input_sizer = wx.BoxSizer(wx.VERTICAL)
+        input_sizer.AddSpacer(2)
+        input_sizer.Add(wx.StaticText(self.settings_panel, label="APP ID:"), 0, wx.LEFT, 5)
+        input_sizer.AddSpacer(2)
+        self.app_id = wx.TextCtrl(self.settings_panel)
+        self.app_id.SetValue(self.config["app_id"])
+        input_sizer.Add(self.app_id, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        input_sizer.AddSpacer(5)
+        input_sizer.Add(wx.StaticText(self.settings_panel, label="密钥:"), 0, wx.LEFT, 5)
+        input_sizer.AddSpacer(2)
+        self.secret_key = wx.TextCtrl(self.settings_panel)
+        self.secret_key.SetValue(self.config["secret_key"])
+        input_sizer.Add(self.secret_key, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+
+        # 按钮
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        help_btn = wx.Button(self.settings_panel, label="帮 助", size=(-1, 35))
+        baidu_save_btn = wx.Button(self.settings_panel, label="保 存", size=(-1, 35))
+        button_sizer.Add(help_btn, 1, wx.EXPAND | wx.RIGHT, 5)
+        button_sizer.Add(baidu_save_btn, 1, wx.EXPAND | wx.LEFT, 5)
+
+        baidu_sizer.Add(input_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        baidu_sizer.AddSpacer(8)
+        baidu_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 9)
+        baidu_sizer.AddSpacer(18)
+
+        # 快捷键设置
+        shortcut_box = wx.StaticBox(self.settings_panel, label="快捷键")
+        shortcut_sizer = wx.StaticBoxSizer(shortcut_box, wx.VERTICAL)
+
+        # 修饰键和输入框
+        modifier_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.ctrl_cb = wx.CheckBox(self.settings_panel, label="Ctrl")
+        self.shift_cb = wx.CheckBox(self.settings_panel, label="Shift")
+        self.alt_cb = wx.CheckBox(self.settings_panel, label="Alt")
+        self.key_input = wx.TextCtrl(self.settings_panel, size=(40, -1), style=wx.TE_CENTRE)
+
+        # 创建容器 包装修饰键和输入框
+        modifier_container = wx.BoxSizer(wx.HORIZONTAL)
+        modifier_container.Add(self.ctrl_cb, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        modifier_container.AddSpacer(5)
+        modifier_container.Add(self.shift_cb, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        modifier_container.AddSpacer(5)
+        modifier_container.Add(self.alt_cb, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        modifier_container.AddSpacer(8)
+        modifier_container.Add(self.key_input, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+
+        modifier_sizer.Add(modifier_container, 0, wx.EXPAND)
+
+        # 保存按钮
+        shortcut_save_btn = wx.Button(self.settings_panel, label="保 存", size=(90, 35))
+
+        # 设置已保存的快捷键
+        saved_shortcut = self.config["shortcut"].lower()
+        self.ctrl_cb.SetValue("ctrl" in saved_shortcut)
+        self.shift_cb.SetValue("shift" in saved_shortcut)
+        self.alt_cb.SetValue("alt" in saved_shortcut)
+        key = saved_shortcut.split("+")[-1] if "+" in saved_shortcut else saved_shortcut
+        if key.isalpha():
+            key = key.upper()
+        self.key_input.SetValue(key)
+
+        shortcut_sizer.AddSpacer(3)
+        shortcut_sizer.Add(modifier_sizer, 0, wx.ALIGN_CENTER | wx.LEFT, 5)
+        shortcut_sizer.AddSpacer(8)
+        shortcut_sizer.Add(shortcut_save_btn, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 9)
+        shortcut_sizer.AddSpacer(18)
+
+        settings_sizer.Add(baidu_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        settings_sizer.AddSpacer(10)
+        settings_sizer.Add(shortcut_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        self.settings_panel.SetSizer(settings_sizer)
+
+        main_sizer.Add(self.settings_panel, 0, wx.EXPAND | wx.ALL, 5)
+        self.settings_panel.Hide()
+
+        # 自定义分隔线
+        self.custom_line = CustomLine(self.panel, colour=wx.Colour(custom_line_colour))
+        main_sizer.Add(self.custom_line, 0, wx.EXPAND)
+
+        # 第四栏：版本信息
+        version_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        self.version_text = wx.StaticText(self.panel, label=about)
+        self.version_text.SetForegroundColour(wx.Colour("#909090"))
+        self.version_text.SetCursor(wx.Cursor(wx.CURSOR_HAND))
+        
+        # 创建消息文本
+        self.message_text = wx.StaticText(self.panel, label="")
+        self.message_text.SetForegroundColour(wx.Colour(255, 0, 0))
+        self.message_text.Hide()
+        
+        version_sizer.Add(self.version_text, 0)
+        version_sizer.Add(self.message_text, 0)
+
+        main_sizer.Add(version_sizer, 0, wx.ALIGN_CENTER | wx.TOP, 8)
+
+        self.panel.SetSizer(main_sizer)
+        self.Centre()
+        
+        # 绑定事件
+        self.start_btn.Bind(wx.EVT_BUTTON, self.toggle_active)
+        self.settings_btn.Bind(wx.EVT_BUTTON, self.toggle_settings)
+        baidu_save_btn.Bind(wx.EVT_BUTTON, self.save_baidu_settings)
+        shortcut_save_btn.Bind(wx.EVT_BUTTON, self.save_shortcut)
+        help_btn.Bind(wx.EVT_BUTTON, lambda evt: webbrowser.open(help_url))
+        self.version_text.Bind(wx.EVT_LEFT_DOWN, self.about_click)
+        self.auto_start.Bind(wx.EVT_CHECKBOX, self.on_auto_start)
+        self.key_input.Bind(wx.EVT_CHAR, self.on_key_char)
+
+        # 初始化消息显示相关的属性
+        self.message_timer = None
+        
+        # 根据配置文件自动激活程序
+        if self.config["auto_start"]:
+            self.toggle_active(None)
+
+    def toggle_settings(self, event):
+        if self.settings_panel.IsShown():
+            self.settings_panel.Hide()
+            self.custom_line.Show()
+            self.settings_btn.SetLabel("设置")
+            self.SetSize(panel_size)
         else:
-            show_message("ID 或 密钥 不能为空")
+            self.settings_panel.Show()
+            self.custom_line.Hide()
+            self.settings_btn.SetLabel("隐藏")
+            self.SetSize(panel_add_settings_size)
+        self.panel.Layout()
 
-    def save_shortcut():
-        chosen_keys = []
-        if ctrl_var.get():
-            chosen_keys.append("ctrl")
-        if shift_var.get():
-            chosen_keys.append("shift")
-        if alt_var.get():
-            chosen_keys.append("alt")
+    def save_baidu_settings(self, event):
+        app_id = self.app_id.GetValue().strip()
+        secret_key = self.secret_key.GetValue().strip()
+        
+        if not app_id or not secret_key:
+            self.show_message("APP ID 和 密钥 不能为空", 5000)
+            return
+            
+        self.config["app_id"] = app_id
+        self.config["secret_key"] = secret_key
+        Config.save_config(self.config)
+        self.show_message("保存成功")
 
-        char = char_entry.get().strip()
-
-        # 检查是否至少勾选了一个修饰键
-        if not chosen_keys:
-            show_message("至少选择一个修饰键（Ctrl 或 Alt）")
+    def save_shortcut(self, event):
+        key = self.key_input.GetValue().strip()
+        for char in key:
+            if ord(char) < 32:
+                self.show_message("无效快捷键", 5000)
+                return
+        if not key:
+            self.show_message("无效快捷键", 5000)
             return
 
-        # 检查字符是否有效（不为空且只有一个字符）
-        if not char:
-            show_message("请在输入框填写一个字母")
-            return
-        elif len(char) != 1:
-            show_message("只能输入一个字母")
-            return
+        shortcut_parts = []
+        if self.ctrl_cb.GetValue():
+            shortcut_parts.append("ctrl")
+        if self.shift_cb.GetValue():
+            shortcut_parts.append("shift")
+        if self.alt_cb.GetValue():
+            shortcut_parts.append("alt")
 
-        # 检查按键组合是否有效（不能仅由shift和char组成）
-        if len(chosen_keys) == 1 and chosen_keys[0] == 'shift':
-            show_message("至少选择一个修饰键（Ctrl 或 Alt）")
-            return
-
-        chosen_keys.append(char)
-        shortcut_key = '+'.join(chosen_keys)
-
-        with open("config.json", "r") as f:
-            saved_config = json.load(f)
-
-        saved_config['shortcut'] = shortcut_key
-
-        with open("config.json", "w") as f:
-            json.dump(saved_config, f)
-
-        config['shortcut'] = shortcut_key
-
-        # 如果已启用，重新注册快捷键
-        if enabled:
-            keyboard.unhook_all_hotkeys()
-            keyboard.add_hotkey(config['shortcut'], perform_translation)
-
-        show_message("已保存")
-
-    def toggle_translate():
-        global enabled
-        if not config['app_id'] or not config['key']:
-            show_message("请在设置中填写 ID 和 密钥")
+        if "ctrl" not in shortcut_parts:
+            self.show_message("需勾选 Ctrl", 5000)
             return
 
-        if enabled:
-            enabled = False
-            open_button.config(text="开启")
-            keyboard.unhook_all_hotkeys()
+        shortcut_parts.append(key.lower())
+        shortcut = "+".join(shortcut_parts)
+
+        try:
+            keyboard.remove_hotkey(self.config["shortcut"])
+        except:
+            pass
+
+        self.config["shortcut"] = shortcut
+        Config.save_config(self.config)
+
+        if self.is_active:
+            keyboard.add_hotkey(shortcut, self.perform_translation)
+
+        self.show_message("保存成功")
+
+    def on_auto_start(self, event):
+        self.config["auto_start"] = self.auto_start.GetValue()
+        Config.save_config(self.config)
+
+        if self.config['auto_start'] and not self.is_active:
+            self.toggle_active(None)
+
+    def on_key_char(self, event):
+        if len(self.key_input.GetValue()) > 0:
+            self.key_input.SetValue("")
+        char = chr(event.GetKeyCode()).upper()
+        self.key_input.SetValue(char)
+
+    def toggle_active(self, event):
+        app_id = self.config["app_id"]
+        secret_key = self.config["secret_key"]
+
+        if not app_id or not secret_key:
+            self.show_message("请先填写 APP ID 和 密钥", 5000)
+            return
+
+        if not self.is_active:
+            self.start_btn.SetLabel("开启中")
+            self.is_active = True
+            keyboard.add_hotkey(self.config["shortcut"], self.perform_translation)
         else:
-            enabled = True
-            open_button.config(text="开启中")
-            keyboard.add_hotkey(config['shortcut'], perform_translation)
+            self.start_btn.SetLabel("开 启")
+            self.is_active = False
+            keyboard.remove_hotkey(self.config["shortcut"])
 
-    def perform_translation():
-        old_text = pyperclip.paste()
-        keyboard.press_and_release("ctrl+c")
-        window.after(100)  # 等待剪贴板更新
-
-        text = pyperclip.paste()
-        if old_text == text or not text.strip():
-            show_message("剪贴板中没有文本内容")
-            return
-
-        translated_text = translate_text(text, config['app_id'], config['key'])
-        if translated_text:
-            # pyperclip.copy(translated_text)  # 将翻译结果复制到剪贴板
-            keyboard.write(translated_text)  # 将翻译结果写入到当前输入框
-        else:
-            show_message("翻译失败，请检查网络和设置")
-
-    def toggle_auto_start():
-        config['auto_start'] = auto_start_var.get()
-
-        with open("config.json", "r") as f:
-            saved_config = json.load(f)
-
-        saved_config['auto_start'] = config['auto_start']
-
-        with open("config.json", "w") as f:
-            json.dump(saved_config, f)
-
-        if config['auto_start'] and not enabled:
-            toggle_translate()
-
-    def translate_text(text, app_id, key):
+    def translate_text(self, text):
+        app_id = self.config["app_id"]
+        key = self.config["secret_key"]
         url = "https://fanyi-api.baidu.com/api/trans/vip/translate"
         salt = random.randint(32768, 65536)
 
@@ -187,150 +327,224 @@ def main():
 
         if response.status_code == 200:
             result = response.json()
-            return result['trans_result'][0]['dst']
+            if "trans_result" in result:
+                return True, result['trans_result'][0]['dst']
+            elif "error_msg" in result:
+                return False, result["error_msg"]
+            return False, None
         else:
-            return None
+            return False, None
 
-    def show_message(msg):
-        message_label.config(text=msg, fg='red')
-        message_label.pack(side="bottom", fill="x", padx=10, pady=(0, 4))
-        window.after(3000, lambda: message_label.config(text=message_label_text, fg=message_label_colour))
+    def perform_translation(self):
+        if self.is_active:
+            try:
+                pyperclip.copy('')
 
-    def toggle_settings_view():
-        # 切换设置部分的显示与隐藏
-        if settings_frame.winfo_ismapped():  # 判断settings_frame是否已经显示
-            settings_frame.pack_forget()
-            window.geometry(size_1)  # 恢复窗口尺寸
-            settings_button.config(text="设置")
+                # 等待快捷键释放
+                shortcut_parts = self.config["shortcut"].lower().split("+")
+                while any(keyboard.is_pressed(key) for key in shortcut_parts):
+                    wx.MilliSleep(50)
+                wx.MilliSleep(100)
+
+                keyboard.send('ctrl+c')
+                wx.MilliSleep(100)
+                
+                # 获取复制的文本
+                copied_text = pyperclip.paste()
+                # print("复制的文本:", copied_text)
+                if not copied_text.strip():
+                    wx.CallAfter(self.show_message, "没有选中文本", 5000)
+                    return
+
+                success, translated_text = self.translate_text(copied_text)
+                if success:
+                    pyperclip.copy(translated_text)
+                    wx.MilliSleep(100)
+                    keyboard.send('ctrl+v')
+                else:
+                    if translated_text:
+                        wx.CallAfter(self.show_message, f"失败，请检查设置: {translated_text}", 5000)
+                    else:
+                        wx.CallAfter(self.show_message, "失败，请检查网络和设置", 5000)
+
+            except Exception as e:
+                # print("翻译出错:", str(e))
+                wx.CallAfter(self.show_message, "出错，请检查网络", 5000)
+
+    def show_message(self, message, duration=3000):
+        self.version_text.Hide()
+        
+        # 显示消息
+        self.message_text.SetLabel(message)
+        self.message_text.Show()
+        
+        # 如果已有计时器在运行，先停止它
+        if self.message_timer:
+            self.message_timer.Stop()
+        
+        # 创建新的计时器
+        self.message_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_message_timer, self.message_timer)
+        self.message_timer.Start(duration, oneShot=True)  # 3秒后触发
+        
+        # 刷新布局
+        self.panel.Layout()
+    
+    def _on_message_timer(self, event):
+        self.message_text.Hide()
+        self.version_text.Show()
+        self.panel.Layout()
+        self.message_timer = None
+
+    def about_click(self, event):
+        dialog = wx.Dialog(self, title="关于", size=about_size)
+        main_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        left_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # 基本信息
+        info_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        
+        text_sizer = wx.BoxSizer(wx.VERTICAL)
+        title_text = wx.StaticText(dialog, label=about_title_text)
+        title_text.SetFont(wx.Font(17, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        dev_text = wx.StaticText(dialog, label=f"开发者：{about_developer}")
+        email_text = wx.StaticText(dialog, label=f"邮   箱：{about_email}")
+        
+        text_sizer.Add(title_text, 0)
+        text_sizer.AddSpacer(8)
+        text_sizer.Add(dev_text, 0)
+        text_sizer.Add(email_text, 0)
+        
+        if os.path.exists("icon.png"):
+            img = wx.Image("icon.png", wx.BITMAP_TYPE_PNG)
+            img = img.Scale(70, 70, wx.IMAGE_QUALITY_HIGH)
+            icon_bitmap = wx.StaticBitmap(dialog, -1, wx.Bitmap(img))
+            info_sizer.Add(text_sizer, 1, wx.EXPAND | wx.ALL, 10)
+            info_sizer.Add(icon_bitmap, 0, wx.ALL | wx.ALIGN_CENTER, 10)
         else:
-            settings_frame.pack(pady=10)
-            window.geometry(size_2)  # 增大窗口尺寸
-            settings_button.config(text="隐藏设置")
+            info_sizer.Add(text_sizer, 1, wx.EXPAND | wx.ALL, 10)
+        
+        left_sizer.AddSpacer(10)
+        left_sizer.Add(info_sizer, 0, wx.EXPAND | wx.ALL, 5)
+        left_sizer.AddSpacer(10)
+        left_sizer.Add(CustomLine(dialog, colour=wx.Colour(custom_line_colour)), 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 15)
+        left_sizer.AddSpacer(20)
+        
+        # 致谢
+        thanks_title = wx.StaticText(dialog, label="致谢")
+        thanks_title.SetFont(wx.Font(17, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        thanks_text = wx.StaticText(dialog, label=f"本程序使用了以下第三方库：\n{third_party_library}")
+        thanks_text2 = wx.StaticText(dialog, label="在此向所有开源项目开发者表达感谢和敬意。")
 
-    # 主窗口
-    size_1 = '350x190'
-    size_2 = '350x540'
-    window = tk.Tk()
-    window.title("翻译助手")
+        left_sizer.Add(thanks_title, 0, wx.LEFT | wx.RIGHT, 15)
+        left_sizer.AddSpacer(8)
+        left_sizer.Add(thanks_text, 0, wx.LEFT | wx.RIGHT, 15)
+        left_sizer.AddSpacer(8)
+        left_sizer.Add(thanks_text2, 0, wx.LEFT | wx.RIGHT, 15)
+        left_sizer.AddSpacer(25)
+        left_sizer.Add(CustomLine(dialog, colour=wx.Colour(custom_line_colour)), 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 15)
+        left_sizer.AddSpacer(20)
+        
+        # 赞助
+        if os.path.exists("sponsor.png"):
+            sponsor_title = wx.StaticText(dialog, label="赞助")
+            sponsor_title.SetFont(wx.Font(17, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+            sponsor_text = wx.StaticText(dialog, label="微信扫码，赞助开发者")
+            sponsor_text2 = wx.StaticText(dialog, label="你一块，我一块，bobo 就能吃鸡块 ヾ(^‿^)ノ")
 
-    # 禁止调整窗口大小
-    window.resizable(False, False)
+            img = wx.Image("sponsor.png", wx.BITMAP_TYPE_PNG)
+            img = img.Scale(280, 280, wx.IMAGE_QUALITY_HIGH)
+            sponsor_bitmap = wx.StaticBitmap(dialog, -1, wx.Bitmap(img))
 
-    # 获取屏幕的宽度和高度
-    screen_width = window.winfo_screenwidth()
-    screen_height = window.winfo_screenheight()
+            left_sizer.Add(sponsor_title, 0, wx.LEFT | wx.RIGHT, 15)
+            left_sizer.AddSpacer(8)
+            left_sizer.Add(sponsor_text, 0, wx.LEFT | wx.RIGHT, 15)
+            left_sizer.AddSpacer(20)
+            left_sizer.Add(sponsor_bitmap, 0, wx.ALL | wx.ALIGN_CENTER, 5)
+            left_sizer.AddSpacer(10)
+            left_sizer.Add(sponsor_text2, 0, wx.ALL | wx.ALIGN_CENTER, 5)
 
-    # 获取窗口的宽度和高度
-    parts = size_1.split('x')
-    window_width = int(parts[0])
-    window_height = int(parts[1])
+        # 右侧
+        right_sizer = wx.BoxSizer(wx.VERTICAL)
+        right_sizer.AddSpacer(19)
+        
+        help_btn = wx.Button(dialog, label="帮 助", size=(100, 35))
+        copy_email_btn = wx.Button(dialog, label="复制邮箱", size=(100, 35))
+        project_btn = wx.Button(dialog, label="项目地址", size=(100, 35))
+        changelog_btn = wx.Button(dialog, label="更新日志", size=(100, 35))
+        close_btn = wx.Button(dialog, label="关 闭", size=(100, 35))
+        
+        for btn in [help_btn, copy_email_btn, project_btn, changelog_btn]:
+            right_sizer.Add(btn, 0, wx.ALL | wx.ALIGN_CENTER, 5)
+            right_sizer.AddSpacer(10)
+        
+        right_sizer.AddStretchSpacer()
+        right_sizer.Add(close_btn, 0, wx.ALL | wx.ALIGN_CENTER, 5)
+        right_sizer.AddSpacer(20)
+        
+        # 绑定事件
+        def on_copy_email(evt):
+            if wx.TheClipboard.Open():
+                wx.TheClipboard.SetData(wx.TextDataObject(about_email))
+                wx.TheClipboard.Close()
+                copy_email_btn.SetLabel("已复制")
+                wx.CallLater(3000, lambda: copy_email_btn.SetLabel("复制邮箱"))
 
-    # 计算窗口的位置
-    position_top = int((screen_height * 0.8 - window_height) / 2)
-    position_left = int((screen_width - window_width) / 2)
+        help_btn.Bind(wx.EVT_BUTTON, lambda evt: webbrowser.open(help_url))
+        copy_email_btn.Bind(wx.EVT_BUTTON, on_copy_email)
+        project_btn.Bind(wx.EVT_BUTTON, lambda evt: webbrowser.open(project_url))
+        changelog_btn.Bind(wx.EVT_BUTTON, lambda evt: webbrowser.open(changelog_url))
+        close_btn.Bind(wx.EVT_BUTTON, lambda evt: dialog.Close())
 
-    # 设置窗口位置
-    window.geometry(f'{size_1}+{position_left}+{position_top}')
-
-    window.iconbitmap('icon.ico')
-
-    # 启用按钮
-    open_button = tk.Button(window, text="开启", command=toggle_translate, width=18, height=2, font=("", 12, "bold"))
-    open_button.pack(pady=(28, 2))
-
-    # 自动开启选项
-    auto_start_var = tk.BooleanVar(value=config['auto_start'])
-    auto_start_checkbox = tk.Checkbutton(window, text="自动开启", variable=auto_start_var, command=toggle_auto_start)
-    auto_start_checkbox.pack(pady=(2, 5))
-
-    # 设置和退出按钮容器
-    button_frame = tk.Frame(window)
-    button_frame.pack(pady=10)
-
-    settings_button = tk.Button(button_frame, text="设置", command=toggle_settings_view, width=10)
-    settings_button.pack(side="left", padx=5)
-
-    quit_button = tk.Button(button_frame, text="退出", command=lambda: window.destroy(), width=10)
-    quit_button.pack(side="left", padx=5)
-
-    # 消息标签
-    message_label_text = '© 2024   @iiboob   V0.1'
-    message_label_colour = '#9d9d9d'
-    message_label = tk.Label(window, text=message_label_text, fg=message_label_colour)
-    message_label.pack(side="bottom", fill="x", padx=10, pady=(0, 4))
-
-    # 设置
-    settings_frame = tk.Frame(window)
-
-    # 第一部分：ID 和 KEY
-    id_key_frame = tk.LabelFrame(settings_frame, text="百度翻译", padx=10, pady=10)
-    id_key_frame.pack(fill="x")
-
-    # APP ID 标签和输入框
-    tk.Label(id_key_frame, text="APP ID:").pack(anchor="w", pady=0)
-    app_id_entry = tk.Entry(id_key_frame, width=40)
-    app_id_entry.insert(0, config['app_id'])
-    app_id_entry.pack()
-
-    # KEY 标签和输入框
-    tk.Label(id_key_frame, text="密钥:").pack(anchor="w", pady=(10, 0))
-    key_entry = tk.Entry(id_key_frame, width=40)
-    key_entry.insert(0, config['key'])
-    key_entry.pack()
-
-    # 保存按钮
-    save_app_key_button = tk.Button(id_key_frame, text="保 存", command=save_app_id_and_key, width=39)
-    save_app_key_button.pack(pady=(16, 10))
-
-    # 第二部分：快捷键设置
-    shortcut_frame = tk.LabelFrame(settings_frame, text="快捷键", padx=10, pady=10)
-    shortcut_frame.pack(fill="x", pady=(20, 0))
-
-    # 创建容器
-    modifiers_frame = tk.Frame(shortcut_frame)
-    modifiers_frame.grid(row=0, column=0)
-
-    # 按钮选择：Ctrl、Shift、Alt
-    ctrl_var = tk.BooleanVar()
-    shift_var = tk.BooleanVar()
-    alt_var = tk.BooleanVar()
-    ctrl_button = tk.Checkbutton(modifiers_frame, text="Ctrl", variable=ctrl_var)
-    ctrl_button.grid(row=0, column=0, padx=(0, 8))
-    shift_button = tk.Checkbutton(modifiers_frame, text="Shift", variable=shift_var)
-    shift_button.grid(row=0, column=1, padx=8)
-    alt_button = tk.Checkbutton(modifiers_frame, text="Alt", variable=alt_var)
-    alt_button.grid(row=0, column=2, padx=8)
-
-    # 输入框
-    char_entry = tk.Entry(modifiers_frame, width=5)
-    char_entry.grid(row=0, column=3, padx=(10, 0))
-
-    # 根据配置设置修饰键复选框和输入框
-    if config['shortcut']:
-        modifiers, char = parse_shortcut(config['shortcut'])
-
-        ctrl_var.set('ctrl' in modifiers)
-        shift_var.set('shift' in modifiers)
-        alt_var.set('alt' in modifiers)
-
-        char_entry.insert(0, char)
-
-    # 保存快捷键按钮
-    save_shortcut_button = tk.Button(shortcut_frame, text="保 存", command=save_shortcut, width=39)
-    save_shortcut_button.grid(row=1, column=0, pady=10)
-
-    # 自动开启
-    if config['auto_start'] and config['app_id'] and config['key']:
-        enabled = True
-        open_button.config(text="开启中")
-        keyboard.add_hotkey(config['shortcut'], perform_translation)
-
-    # 运行主窗口
-    window.mainloop()
+        # 设置主布局
+        main_sizer.Add(left_sizer, 1, wx.EXPAND | wx.ALL, 10)
+        main_sizer.Add(CustomLine(dialog, colour=wx.Colour(custom_line_colour), is_vertical=True), 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 10)
+        main_sizer.Add(right_sizer, 0, wx.EXPAND | wx.ALL, 10)
+        
+        dialog.SetSizer(main_sizer)
+        dialog.Centre()
+        dialog.ShowModal()
+        dialog.Destroy()
+    
+    def copy_to_clipboard(self, text):
+        if wx.TheClipboard.Open():
+            wx.TheClipboard.SetData(wx.TextDataObject(text))
+            wx.TheClipboard.Close()
+            self.show_message("已复制到剪贴板", 3000)
 
 
+class CustomLine(wx.Panel):
+    def __init__(self, parent, colour=wx.Colour(255, 0, 0), is_vertical=False):
+        super().__init__(parent)
+        self.colour = colour
+        self.is_vertical = is_vertical
+        self.SetBackgroundColour(wx.Colour("#ffffff"))
+        self.Bind(wx.EVT_PAINT, self.on_paint)
+        
+        if is_vertical:
+            self.SetMinSize((1, -1))
+        else:
+            self.SetMinSize((-1, 1))
 
-# 空白复制会使用历史进行翻译的问题
+    def on_paint(self, event):
+        dc = wx.PaintDC(self)
+        dc.SetPen(wx.Pen(self.colour, 1))
+        
+        w, h = self.GetSize()
+        if self.is_vertical:
+            dc.DrawLine(0, 0, 0, h)
+        else:
+            dc.DrawLine(0, 0, w, 0)
 
-if __name__ == "__main__":
-    main()
+
+class TranslatorApp(wx.App):
+    def OnInit(self):
+        frame = TranslatorFrame()
+        frame.Show()
+        return True
+
+
+if __name__ == '__main__':
+    app = TranslatorApp()
+    app.MainLoop()
