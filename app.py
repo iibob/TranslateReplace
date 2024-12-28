@@ -7,15 +7,15 @@ import random
 from hashlib import md5
 import requests
 import webbrowser
-
+import math
 
 panel_size = (400, 200)
 panel_add_settings_size = (400, 575)
-about_size = (550, 755)
+about_size = (550, 775)
 CONFIG_FILE = "config.json"
 custom_line_colour = "#d2d2d2"
 about = "v0.2.0  ·  帮助  ·  反馈  ·  赞助"
-about_title_text = "翻译助手 v0.2.0"
+about_title_text = "翻译助手 v0.2.1"
 about_developer = "iibob"
 about_email = 'iibobapp@gmail.com'
 third_party_library = "wxPython、keyboard、pyperclip、requests"
@@ -37,7 +37,7 @@ class Config:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(default_config, f, indent=4)
             return default_config
-        
+
         with open(CONFIG_FILE, 'r') as f:
             return json.load(f)
 
@@ -177,12 +177,12 @@ class TranslatorFrame(wx.Frame):
         self.version_text = wx.StaticText(self.panel, label=about)
         self.version_text.SetForegroundColour(wx.Colour("#909090"))
         self.version_text.SetCursor(wx.Cursor(wx.CURSOR_HAND))
-        
+
         # 创建消息文本
         self.message_text = wx.StaticText(self.panel, label="")
         self.message_text.SetForegroundColour(wx.Colour(255, 0, 0))
         self.message_text.Hide()
-        
+
         version_sizer.Add(self.version_text, 0)
         version_sizer.Add(self.message_text, 0)
 
@@ -190,7 +190,7 @@ class TranslatorFrame(wx.Frame):
 
         self.panel.SetSizer(main_sizer)
         self.Centre()
-        
+
         # 绑定事件
         self.start_btn.Bind(wx.EVT_BUTTON, self.toggle_active)
         self.settings_btn.Bind(wx.EVT_BUTTON, self.toggle_settings)
@@ -203,7 +203,7 @@ class TranslatorFrame(wx.Frame):
 
         # 初始化消息显示相关的属性
         self.message_timer = None
-        
+
         # 根据配置文件自动激活程序
         if self.config["auto_start"]:
             self.toggle_active(None)
@@ -224,11 +224,11 @@ class TranslatorFrame(wx.Frame):
     def save_baidu_settings(self, event):
         app_id = self.app_id.GetValue().strip()
         secret_key = self.secret_key.GetValue().strip()
-        
+
         if not app_id or not secret_key:
             self.show_message("APP ID 和 密钥 不能为空", 5000)
             return
-            
+
         self.config["app_id"] = app_id
         self.config["secret_key"] = secret_key
         Config.save_config(self.config)
@@ -348,7 +348,7 @@ class TranslatorFrame(wx.Frame):
 
                 keyboard.send('ctrl+c')
                 wx.MilliSleep(100)
-                
+
                 # 获取复制的文本
                 copied_text = pyperclip.paste()
                 # print("复制的文本:", copied_text)
@@ -373,23 +373,23 @@ class TranslatorFrame(wx.Frame):
 
     def show_message(self, message, duration=3000):
         self.version_text.Hide()
-        
+
         # 显示消息
         self.message_text.SetLabel(message)
         self.message_text.Show()
-        
+
         # 如果已有计时器在运行，先停止它
         if self.message_timer:
             self.message_timer.Stop()
-        
+
         # 创建新的计时器
         self.message_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._on_message_timer, self.message_timer)
         self.message_timer.Start(duration, oneShot=True)  # 3秒后触发
-        
+
         # 刷新布局
         self.panel.Layout()
-    
+
     def _on_message_timer(self, event):
         self.message_text.Hide()
         self.version_text.Show()
@@ -401,21 +401,21 @@ class TranslatorFrame(wx.Frame):
         main_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         left_sizer = wx.BoxSizer(wx.VERTICAL)
-        
+
         # 基本信息
         info_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        
+
         text_sizer = wx.BoxSizer(wx.VERTICAL)
         title_text = wx.StaticText(dialog, label=about_title_text)
         title_text.SetFont(wx.Font(17, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
         dev_text = wx.StaticText(dialog, label=f"开发者：{about_developer}")
         email_text = wx.StaticText(dialog, label=f"邮   箱：{about_email}")
-        
+
         text_sizer.Add(title_text, 0)
         text_sizer.AddSpacer(8)
         text_sizer.Add(dev_text, 0)
         text_sizer.Add(email_text, 0)
-        
+
         if os.path.exists("icon.png"):
             img = wx.Image("icon.png", wx.BITMAP_TYPE_PNG)
             img = img.Scale(70, 70, wx.IMAGE_QUALITY_HIGH)
@@ -424,13 +424,13 @@ class TranslatorFrame(wx.Frame):
             info_sizer.Add(icon_bitmap, 0, wx.ALL | wx.ALIGN_CENTER, 10)
         else:
             info_sizer.Add(text_sizer, 1, wx.EXPAND | wx.ALL, 10)
-        
+
         left_sizer.AddSpacer(10)
         left_sizer.Add(info_sizer, 0, wx.EXPAND | wx.ALL, 5)
         left_sizer.AddSpacer(10)
         left_sizer.Add(CustomLine(dialog, colour=wx.Colour(custom_line_colour)), 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 15)
         left_sizer.AddSpacer(20)
-        
+
         # 致谢
         thanks_title = wx.StaticText(dialog, label="致谢")
         thanks_title.SetFont(wx.Font(17, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
@@ -445,7 +445,7 @@ class TranslatorFrame(wx.Frame):
         left_sizer.AddSpacer(25)
         left_sizer.Add(CustomLine(dialog, colour=wx.Colour(custom_line_colour)), 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 15)
         left_sizer.AddSpacer(20)
-        
+
         # 赞助
         if os.path.exists("sponsor.png"):
             sponsor_title = wx.StaticText(dialog, label="赞助")
@@ -455,34 +455,35 @@ class TranslatorFrame(wx.Frame):
 
             img = wx.Image("sponsor.png", wx.BITMAP_TYPE_PNG)
             img = img.Scale(280, 280, wx.IMAGE_QUALITY_HIGH)
-            sponsor_bitmap = wx.StaticBitmap(dialog, -1, wx.Bitmap(img))
+            sponsor_panel = RotatingPanel(dialog, img)
+            sponsor_panel.SetMinSize((300, 300))
 
             left_sizer.Add(sponsor_title, 0, wx.LEFT | wx.RIGHT, 15)
             left_sizer.AddSpacer(8)
             left_sizer.Add(sponsor_text, 0, wx.LEFT | wx.RIGHT, 15)
             left_sizer.AddSpacer(20)
-            left_sizer.Add(sponsor_bitmap, 0, wx.ALL | wx.ALIGN_CENTER, 5)
+            left_sizer.Add(sponsor_panel, 0, wx.ALL | wx.ALIGN_CENTER, 5)
             left_sizer.AddSpacer(10)
             left_sizer.Add(sponsor_text2, 0, wx.ALL | wx.ALIGN_CENTER, 5)
 
         # 右侧
         right_sizer = wx.BoxSizer(wx.VERTICAL)
         right_sizer.AddSpacer(19)
-        
+
         help_btn = wx.Button(dialog, label="帮 助", size=(100, 35))
         copy_email_btn = wx.Button(dialog, label="复制邮箱", size=(100, 35))
         project_btn = wx.Button(dialog, label="项目地址", size=(100, 35))
         changelog_btn = wx.Button(dialog, label="更新日志", size=(100, 35))
         close_btn = wx.Button(dialog, label="关 闭", size=(100, 35))
-        
+
         for btn in [help_btn, copy_email_btn, project_btn, changelog_btn]:
             right_sizer.Add(btn, 0, wx.ALL | wx.ALIGN_CENTER, 5)
             right_sizer.AddSpacer(10)
-        
+
         right_sizer.AddStretchSpacer()
         right_sizer.Add(close_btn, 0, wx.ALL | wx.ALIGN_CENTER, 5)
         right_sizer.AddSpacer(20)
-        
+
         # 绑定事件
         def on_copy_email(evt):
             if wx.TheClipboard.Open():
@@ -501,17 +502,107 @@ class TranslatorFrame(wx.Frame):
         main_sizer.Add(left_sizer, 1, wx.EXPAND | wx.ALL, 10)
         main_sizer.Add(CustomLine(dialog, colour=wx.Colour(custom_line_colour), is_vertical=True), 0, wx.EXPAND | wx.TOP | wx.BOTTOM, 10)
         main_sizer.Add(right_sizer, 0, wx.EXPAND | wx.ALL, 10)
-        
+
         dialog.SetSizer(main_sizer)
         dialog.Centre()
         dialog.ShowModal()
         dialog.Destroy()
-    
+
     def copy_to_clipboard(self, text):
         if wx.TheClipboard.Open():
             wx.TheClipboard.SetData(wx.TextDataObject(text))
             wx.TheClipboard.Close()
             self.show_message("已复制到剪贴板", 3000)
+
+
+class RotatingPanel(wx.Panel):
+    def __init__(self, parent, image):
+        super().__init__(parent)
+        self.image = image
+        self.angle = 0
+        self.timer = None
+
+        # 计算旋转所需的最大空间
+        img_width = self.image.GetWidth()
+        img_height = self.image.GetHeight()
+        self.max_size = math.ceil(math.sqrt(img_width ** 2 + img_height ** 2))
+
+        # 创建内存缓冲位图
+        self.buffer = wx.Bitmap(self.max_size, self.max_size)
+
+        # 设置面板背景为透明
+        self.SetBackgroundStyle(wx.BG_STYLE_CUSTOM)
+
+        # 绑定事件
+        self.Bind(wx.EVT_PAINT, self.on_paint)
+        self.Bind(wx.EVT_SIZE, self.on_size)
+
+        # 初始化缓冲
+        self.init_buffer()
+        
+        # 启动定时器
+        self.timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self.on_timer)
+        self.timer.Start(50)  # 每50毫秒更新一次
+
+    def init_buffer(self):
+        """初始化缓冲"""
+        dc = wx.MemoryDC()
+        dc.SelectObject(self.buffer)
+        self.draw(dc)
+        dc.SelectObject(wx.NullBitmap)
+
+    def draw(self, dc):
+        """绘制图像到指定的DC"""
+        # 使用透明背景
+        dc.SetBackground(wx.Brush(self.GetParent().GetBackgroundColour()))
+        dc.Clear()
+
+        # 获取面板尺寸
+        width, height = self.GetSize()
+
+        # 创建图片副本并旋转
+        img_copy = self.image.Copy()
+        img_center = wx.Point(self.image.GetWidth() // 2,
+                            self.image.GetHeight() // 2)
+        rotated_img = img_copy.Rotate(math.radians(self.angle),
+                                    img_center, True)
+
+        # 计算居中位置
+        x = (width - rotated_img.GetWidth()) // 2
+        y = (height - rotated_img.GetHeight()) // 2
+
+        # 如果图片有alpha通道，确保使用它
+        if rotated_img.HasAlpha():
+            bitmap = wx.Bitmap(rotated_img)
+        else:
+            # 如果没有alpha通道，添加一个
+            rotated_img.InitAlpha()
+            bitmap = wx.Bitmap(rotated_img)
+
+        # 绘制图片
+        dc.DrawBitmap(bitmap, x, y, True)  # True表示使用mask
+
+    def on_paint(self, event):
+        """处理绘制事件"""
+        dc = wx.BufferedPaintDC(self)
+        dc.DrawBitmap(self.buffer, 0, 0, True)
+
+    def on_size(self, event):
+        """处理尺寸改变事件"""
+        self.init_buffer()
+        event.Skip()
+
+    def on_timer(self, event):
+        """定时器事件处理"""
+        self.angle = (self.angle - 0.2) % 360
+        self.init_buffer()
+        self.Refresh()
+
+    def __del__(self):
+        """清理定时器"""
+        if self.timer:
+            self.timer.Stop()
 
 
 class CustomLine(wx.Panel):
@@ -521,7 +612,7 @@ class CustomLine(wx.Panel):
         self.is_vertical = is_vertical
         self.SetBackgroundColour(wx.Colour("#ffffff"))
         self.Bind(wx.EVT_PAINT, self.on_paint)
-        
+
         if is_vertical:
             self.SetMinSize((1, -1))
         else:
@@ -530,7 +621,7 @@ class CustomLine(wx.Panel):
     def on_paint(self, event):
         dc = wx.PaintDC(self)
         dc.SetPen(wx.Pen(self.colour, 1))
-        
+
         w, h = self.GetSize()
         if self.is_vertical:
             dc.DrawLine(0, 0, 0, h)
