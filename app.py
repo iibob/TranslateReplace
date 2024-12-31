@@ -8,42 +8,88 @@ from hashlib import md5
 import requests
 import webbrowser
 import math
+import shutil
 
+
+def init_config_file():
+    project_dir = os.getcwd()
+
+    items = os.listdir(project_dir)
+    folders = []
+    for item in items:
+        item_path = os.path.join(project_dir, item)
+        if os.path.isdir(item_path):
+            folders.append(item)
+
+    def create_data_dir(path):
+        if not os.path.exists(path):
+            os.mkdir(path)  # 创建目录
+
+    data_dir_path = os.path.join(project_dir, "data")
+    target_dir_path = os.path.join(project_dir, "_internal")
+
+    if folders and "_internal" in folders:      # 程序已打包
+        if 'data' in folders:
+            # 首次打开程序，准备移动 data 目录
+            if os.path.exists(data_dir_path) and os.path.exists(target_dir_path):
+                shutil.move(data_dir_path, target_dir_path)
+        else:
+            data_dir_path = os.path.join(target_dir_path, "data")
+            create_data_dir(data_dir_path)
+
+        file_directory = r"_internal\data"
+
+    else:
+        if 'data' not in folders:
+            create_data_dir(data_dir_path)
+
+        file_directory = "data"
+
+    icon_image = f"{file_directory}\\icon.png"
+    sponsor_image = f"{file_directory}\\sponsor.data"
+    dev_image = f"{file_directory}\\dev.data"
+    config_file = f"{file_directory}\\config.json"
+
+    return icon_image, sponsor_image, dev_image, config_file
+
+
+# 打包程序后，修改 app.py 的文件名为程序名+版本号
+version = "v0.2.2"
 panel_size = (400, 200)
 panel_add_settings_size = (400, 575)
 about_size = (550, 775)
-CONFIG_FILE = "config.json"
 custom_line_colour = "#d2d2d2"
-about = "v0.2.0  ·  帮助  ·  反馈  ·  赞助"
-about_title_text = "翻译助手 v0.2.1"
+about = f"{version}  ·  帮助  ·  反馈  ·  赞助"
+about_title_text = f"翻译助手 {version}"
 about_developer = "iibob"
 about_email = 'iibobapp@gmail.com'
 third_party_library = "wxPython、keyboard、pyperclip、requests"
 help_url = "https://www.yuque.com/bo_o/box/pma7zu#PVjrc"
 project_url = "https://github.com/iibob/TranslateReplace"
 changelog_url = "https://www.yuque.com/bo_o/box/pma7zu#AGCCR"
+icon_image, sponsor_image, dev_image, config_file = init_config_file()
 
 
 class Config:
     @staticmethod
     def load_config():
-        if not os.path.exists(CONFIG_FILE):
+        if not os.path.exists(config_file):
             default_config = {
                 "app_id": "",
                 "secret_key": "",
                 "shortcut": "ctrl+shift+F",
                 "auto_start": False
             }
-            with open(CONFIG_FILE, 'w') as f:
+            with open(config_file, 'w') as f:
                 json.dump(default_config, f, indent=4)
             return default_config
 
-        with open(CONFIG_FILE, 'r') as f:
+        with open(config_file, 'r') as f:
             return json.load(f)
 
     @staticmethod
     def save_config(config):
-        with open(CONFIG_FILE, 'w') as f:
+        with open(config_file, 'w') as f:
             json.dump(config, f, indent=4)
 
 
@@ -52,8 +98,8 @@ class TranslatorFrame(wx.Frame):
         super().__init__(parent=None, title="翻译助手", size=panel_size, style=wx.DEFAULT_FRAME_STYLE & ~(wx.RESIZE_BORDER | wx.MAXIMIZE_BOX))
 
         # 设置窗口图标
-        if os.path.exists("icon.png"):
-            icon = wx.Icon("icon.png", wx.BITMAP_TYPE_PNG)
+        if os.path.exists(icon_image):
+            icon = wx.Icon(icon_image, wx.BITMAP_TYPE_PNG)
             self.SetIcon(icon)
 
         # 加载配置
@@ -416,8 +462,8 @@ class TranslatorFrame(wx.Frame):
         text_sizer.Add(dev_text, 0)
         text_sizer.Add(email_text, 0)
 
-        if os.path.exists("icon.png"):
-            img = wx.Image("icon.png", wx.BITMAP_TYPE_PNG)
+        if os.path.exists(icon_image):
+            img = wx.Image(icon_image, wx.BITMAP_TYPE_PNG)
             img = img.Scale(70, 70, wx.IMAGE_QUALITY_HIGH)
             icon_bitmap = wx.StaticBitmap(dialog, -1, wx.Bitmap(img))
             info_sizer.Add(text_sizer, 1, wx.EXPAND | wx.ALL, 10)
@@ -447,16 +493,17 @@ class TranslatorFrame(wx.Frame):
         left_sizer.AddSpacer(20)
 
         # 赞助
-        if os.path.exists("sponsor.png"):
+        if os.path.exists(sponsor_image) and os.path.exists(dev_image):
             sponsor_title = wx.StaticText(dialog, label="赞助")
             sponsor_title.SetFont(wx.Font(17, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
             sponsor_text = wx.StaticText(dialog, label="微信扫码，赞助开发者")
             sponsor_text2 = wx.StaticText(dialog, label="你一块，我一块，bobo 就能吃鸡块 ヾ(^‿^)ノ")
 
-            img = wx.Image("sponsor.png", wx.BITMAP_TYPE_PNG)
+            img = wx.Image(sponsor_image, wx.BITMAP_TYPE_PNG)
             img = img.Scale(280, 280, wx.IMAGE_QUALITY_HIGH)
-            sponsor_panel = RotatingPanel(dialog, img)
-            sponsor_panel.SetMinSize((300, 300))
+            sponsor_panel_size = (300, 300)
+            sponsor_panel = RotatingPanel(dialog, img, sponsor_panel_size, dev_image)
+            sponsor_panel.SetMinSize(sponsor_panel_size)
 
             left_sizer.Add(sponsor_title, 0, wx.LEFT | wx.RIGHT, 15)
             left_sizer.AddSpacer(8)
@@ -516,15 +563,19 @@ class TranslatorFrame(wx.Frame):
 
 
 class RotatingPanel(wx.Panel):
-    def __init__(self, parent, image):
+    def __init__(self, parent, sponsor_image, sponsor_panel_size, dev_image):
         super().__init__(parent)
-        self.image = image
+        self.sponsor_image = sponsor_image
+        self.sponsor_panel_size = sponsor_panel_size
+        self.dev_image = wx.Image(dev_image, wx.BITMAP_TYPE_PNG)
+        self.dev_image = self.dev_image.Scale(100, 100, wx.IMAGE_QUALITY_HIGH)
+
         self.angle = 0
         self.timer = None
 
         # 计算旋转所需的最大空间
-        img_width = self.image.GetWidth()
-        img_height = self.image.GetHeight()
+        img_width = self.sponsor_image.GetWidth()
+        img_height = self.sponsor_image.GetHeight()
         self.max_size = math.ceil(math.sqrt(img_width ** 2 + img_height ** 2))
 
         # 创建内存缓冲位图
@@ -539,7 +590,7 @@ class RotatingPanel(wx.Panel):
 
         # 初始化缓冲
         self.init_buffer()
-        
+
         # 启动定时器
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.on_timer)
@@ -562,9 +613,9 @@ class RotatingPanel(wx.Panel):
         width, height = self.GetSize()
 
         # 创建图片副本并旋转
-        img_copy = self.image.Copy()
-        img_center = wx.Point(self.image.GetWidth() // 2,
-                            self.image.GetHeight() // 2)
+        img_copy = self.sponsor_image.Copy()
+        img_center = wx.Point(self.sponsor_image.GetWidth() // 2,
+                            self.sponsor_image.GetHeight() // 2)
         rotated_img = img_copy.Rotate(math.radians(self.angle),
                                     img_center, True)
 
@@ -580,8 +631,14 @@ class RotatingPanel(wx.Panel):
             rotated_img.InitAlpha()
             bitmap = wx.Bitmap(rotated_img)
 
-        # 绘制图片
         dc.DrawBitmap(bitmap, x, y, True)  # True表示使用mask
+
+        # 计算dev_image居中位置
+        dev_x = (self.sponsor_panel_size[0] - self.dev_image.GetWidth()) // 2
+        dev_y = (self.sponsor_panel_size[1] - self.dev_image.GetHeight()) // 2
+
+        # 绘制图片
+        dc.DrawBitmap(wx.Bitmap(self.dev_image), dev_x, dev_y, True)
 
     def on_paint(self, event):
         """处理绘制事件"""
