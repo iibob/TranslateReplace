@@ -40,10 +40,10 @@
 ## 更新日志：
 <details><summary>点击打开</summary>
 
-**v0.2.2  2024年12月31日**
+**2024年12月31日&nbsp;&nbsp;&nbsp;&nbsp;v0.2.2**
 - 使用更加现代化的 GUI 工具 wxPython 重构了界面
 
-**v0.1.0  2024年12月16日**
+**2024年12月16日&nbsp;&nbsp;&nbsp;&nbsp;v0.1.0**
 - 初代版本发布
 - 使用 tkinter 构建
 
