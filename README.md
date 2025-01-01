@@ -1,6 +1,7 @@
 # 翻译助手
 ![img-1](https://github.com/user-attachments/assets/298102c6-2f5e-47c9-a800-0b1419cda182)
 
+<br>
 
 ## 功能：
 
@@ -33,6 +34,8 @@
 5. 完成
 
 ![002](https://github.com/user-attachments/assets/74cc1163-aa5e-4bfe-beb0-9d3c779b76a0)
+
+<br>
 
 ## 更新日志：
 <details><summary>点击打开</summary>
