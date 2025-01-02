@@ -7,7 +7,7 @@
 
 自动替换选中的文本为译文。
 
-![001](https://github.com/user-attachments/assets/c71b6245-0620-424f-9281-8814718f1ee9)
+![001](https://github.com/user-attachments/assets/7de43fa4-aa07-4edf-8157-11e486de8f17)
 
 <br>
 
@@ -33,7 +33,7 @@
 4. 鼠标选中需要翻译的文本，按下快捷键
 5. 完成
 
-![002](https://github.com/user-attachments/assets/74cc1163-aa5e-4bfe-beb0-9d3c779b76a0)
+![002](https://github.com/user-attachments/assets/8f8deb8c-2839-4355-a894-7bc12d41f070)
 
 <br>
 
