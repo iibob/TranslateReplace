@@ -1,5 +1,5 @@
 # 翻译助手
-![000](https://github.com/user-attachments/assets/48a75c96-656c-44be-af3f-3e28fef25564)
+![002](https://github.com/user-attachments/assets/0078103a-8572-40b3-b846-fb07c08d7476)
 
 <br>
 
