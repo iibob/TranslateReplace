@@ -9,6 +9,8 @@ import requests
 import webbrowser
 import math
 import shutil
+import threading
+import time
 
 
 def init_config_file():
@@ -54,9 +56,9 @@ def init_config_file():
 
 
 # 打包程序后，修改 app.py 的文件名为程序名+版本号
-version = "v0.2.2"
-panel_size = (400, 200)
-panel_add_settings_size = (400, 575)
+version = "v0.2.5"
+panel_size = (400, 240)
+panel_add_settings_size = (400, 608)
 about_size = (550, 775)
 custom_line_colour = "#d2d2d2"
 about = f"{version}  ·  帮助  ·  反馈  ·  赞助"
@@ -102,9 +104,59 @@ class TranslatorFrame(wx.Frame):
             icon = wx.Icon(icon_image, wx.BITMAP_TYPE_PNG)
             self.SetIcon(icon)
 
+        # 语言代码映射
+        self.lang_codes = {
+            0: "auto",
+            1: "zh",
+            2: "cht",
+            3: "en",
+            4: "jp",
+            5: "kor",
+            6: "fra",
+            7: "spa",
+            8: "th",
+            9: "ara",
+            10: "ru",
+            11: "pt",
+            12: "de",
+            13: "it",
+            14: "el",
+            15: "nl",
+            16: "pl",
+            17: "bul",
+            18: "est",
+            19: "dan",
+            20: "fin",
+            21: "cs",
+            22: "rom",
+            23: "slo",
+            24: "swe",
+            25: "hu",
+            26: "vie"
+        }
+
         # 加载配置
         self.config = Config.load_config()
         self.is_active = False
+
+        def keyboard_loop():
+            while True:
+                if self.is_active:
+                    try:
+                        keyboard.remove_hotkey(self.config["shortcut"])
+                        # print('循环中，移除热键')
+                    except:
+                        pass
+                    keyboard.add_hotkey(self.config["shortcut"], self.perform_translation)
+                    # print('循环中，添加热键')
+                wx.MilliSleep(1000 * 10)
+                # wx.MilliSleep(1000)
+                # print(f"循环中，当前时间：{time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # 创建线程，间接保持键盘监听活跃
+        thread = threading.Thread(target=keyboard_loop)
+        thread.daemon = True
+        thread.start()
 
         # 创建主面板
         self.panel = wx.Panel(self)
@@ -117,16 +169,23 @@ class TranslatorFrame(wx.Frame):
         button_sizer.Add(self.start_btn, 1, wx.ALL | wx.EXPAND, 5)
         button_sizer.Add(self.settings_btn, 0, wx.ALL | wx.EXPAND, 5)
         main_sizer.AddSpacer(15)
-        main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 6)
+        main_sizer.Add(button_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 4)
         main_sizer.AddSpacer(5)
 
-        # 第二栏：自动开启选项
-        auto_start_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        # 第二栏：选项
+        option_box = wx.StaticBox(self.panel)
+        option_box_sizer = wx.StaticBoxSizer(option_box, wx.HORIZONTAL)
         self.auto_start = wx.CheckBox(self.panel, label="自动开启")
-        auto_start_sizer.Add(self.auto_start, 0, wx.LEFT | wx.RIGHT | wx.ALIGN_CENTER, 5)
-        main_sizer.Add(auto_start_sizer, 0, wx.ALIGN_CENTER)
-        main_sizer.AddSpacer(20)
-        self.auto_start.SetValue(self.config["auto_start"])
+        self.auto_start.SetValue(self.config.get("auto_start", False))
+        self.lang_choice_text = wx.StaticText(self.panel, label="译文语言:")
+        self.lang_choice = wx.Choice(self.panel, choices=["自动检测", "中文", "繁体中文", "英语", "日语", "韩语", "法语", "西班牙语", "泰语", "阿拉伯语", "俄语", "葡萄牙语", "德语", "意大利语", "希腊语", "荷兰语", "波兰语", "保加利亚语", "爱沙尼亚语", "丹麦语", "芬兰语", "捷克语", "罗马尼亚语", "斯洛文尼亚语", "瑞典语", "匈牙利语", "越南语"])
+        self.lang_choice.SetSelection(0)
+        option_box_sizer.Add(self.lang_choice_text,  0, wx.ALIGN_CENTER | wx.LEFT, 11)
+        option_box_sizer.Add(self.lang_choice, 0, wx.ALIGN_CENTER | wx.LEFT, 8)
+        option_box_sizer.Add(wx.StaticText(self.panel, label=""), 1, wx.Top | wx.BOTTOM, 30)
+        option_box_sizer.Add(self.auto_start, 0, wx.ALIGN_CENTER | wx.RIGHT, 3)
+        main_sizer.Add(option_box_sizer, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 10)
+        main_sizer.AddSpacer(10)
 
         # 第三栏：设置区域
         self.settings_panel = wx.Panel(self.panel)
@@ -213,10 +272,6 @@ class TranslatorFrame(wx.Frame):
         main_sizer.Add(self.settings_panel, 0, wx.EXPAND | wx.ALL, 5)
         self.settings_panel.Hide()
 
-        # 自定义分隔线
-        self.custom_line = CustomLine(self.panel, colour=wx.Colour(custom_line_colour))
-        main_sizer.Add(self.custom_line, 0, wx.EXPAND)
-
         # 第四栏：版本信息
         version_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
@@ -232,7 +287,7 @@ class TranslatorFrame(wx.Frame):
         version_sizer.Add(self.version_text, 0)
         version_sizer.Add(self.message_text, 0)
 
-        main_sizer.Add(version_sizer, 0, wx.ALIGN_CENTER | wx.TOP, 8)
+        main_sizer.Add(version_sizer, 0, wx.ALIGN_CENTER | wx.TOP, 5)
 
         self.panel.SetSizer(main_sizer)
         self.Centre()
@@ -246,6 +301,7 @@ class TranslatorFrame(wx.Frame):
         self.version_text.Bind(wx.EVT_LEFT_DOWN, self.about_click)
         self.auto_start.Bind(wx.EVT_CHECKBOX, self.on_auto_start)
         self.key_input.Bind(wx.EVT_CHAR, self.on_key_char)
+        self.Bind(wx.EVT_CLOSE, self.on_close)
 
         # 初始化消息显示相关的属性
         self.message_timer = None
@@ -257,12 +313,10 @@ class TranslatorFrame(wx.Frame):
     def toggle_settings(self, event):
         if self.settings_panel.IsShown():
             self.settings_panel.Hide()
-            self.custom_line.Show()
             self.settings_btn.SetLabel("设置")
             self.SetSize(panel_size)
         else:
             self.settings_panel.Show()
-            self.custom_line.Hide()
             self.settings_btn.SetLabel("隐藏")
             self.SetSize(panel_add_settings_size)
         self.panel.Layout()
@@ -359,10 +413,12 @@ class TranslatorFrame(wx.Frame):
 
         sign = make_md5(app_id + text + str(salt) + key)
 
+        to_lang = self.lang_codes.get(self.lang_choice.GetSelection(), "auto")
+
         params = {
             'q': text,
             'from': 'auto',
-            'to': 'auto',
+            'to': to_lang,
             'appid': app_id,
             'salt': salt,
             'sign': sign
@@ -382,40 +438,41 @@ class TranslatorFrame(wx.Frame):
             return False, None
 
     def perform_translation(self):
-        if self.is_active:
-            try:
-                pyperclip.copy('')
+        wx.CallAfter(self.show_message, "热键触发，开始执行翻译")
+        try:
+            pyperclip.copy('')
 
-                # 等待快捷键释放
-                shortcut_parts = self.config["shortcut"].lower().split("+")
-                while any(keyboard.is_pressed(key) for key in shortcut_parts):
-                    wx.MilliSleep(50)
+            # 等待快捷键释放
+            shortcut_parts = self.config["shortcut"].lower().split("+")
+            while any(keyboard.is_pressed(key) for key in shortcut_parts):
+                wx.MilliSleep(50)
+            wx.MilliSleep(100)
+
+            keyboard.send('ctrl+c')
+            wx.MilliSleep(100)
+
+            # 获取复制的文本
+            copied_text = pyperclip.paste()
+            # print("复制的文本:", copied_text)
+            if not copied_text.strip():
+                wx.CallAfter(self.show_message, "没有选中文本", 5000)
+                return
+
+            success, translated_text = self.translate_text(copied_text)
+            if success:
+                pyperclip.copy(translated_text)
                 wx.MilliSleep(100)
-
-                keyboard.send('ctrl+c')
-                wx.MilliSleep(100)
-
-                # 获取复制的文本
-                copied_text = pyperclip.paste()
-                # print("复制的文本:", copied_text)
-                if not copied_text.strip():
-                    wx.CallAfter(self.show_message, "没有选中文本", 5000)
-                    return
-
-                success, translated_text = self.translate_text(copied_text)
-                if success:
-                    pyperclip.copy(translated_text)
-                    wx.MilliSleep(100)
-                    keyboard.send('ctrl+v')
+                keyboard.send('ctrl+v')
+                wx.CallAfter(self.show_message, "翻译完成")
+            else:
+                if translated_text:
+                    wx.CallAfter(self.show_message, f"失败，请检查设置: {translated_text}", 5000)
                 else:
-                    if translated_text:
-                        wx.CallAfter(self.show_message, f"失败，请检查设置: {translated_text}", 5000)
-                    else:
-                        wx.CallAfter(self.show_message, "失败，请检查网络和设置", 5000)
+                    wx.CallAfter(self.show_message, "失败，请检查网络和设置", 5000)
 
-            except Exception as e:
-                # print("翻译出错:", str(e))
-                wx.CallAfter(self.show_message, "出错，请检查网络", 5000)
+        except Exception as e:
+            # print("翻译出错:", str(e))
+            wx.CallAfter(self.show_message, "出错，请检查网络", 5000)
 
     def show_message(self, message, duration=3000):
         self.version_text.Hide()
@@ -555,11 +612,9 @@ class TranslatorFrame(wx.Frame):
         dialog.ShowModal()
         dialog.Destroy()
 
-    def copy_to_clipboard(self, text):
-        if wx.TheClipboard.Open():
-            wx.TheClipboard.SetData(wx.TextDataObject(text))
-            wx.TheClipboard.Close()
-            self.show_message("已复制到剪贴板", 3000)
+    def on_close(self, event):
+        keyboard.unhook_all()
+        event.Skip()
 
 
 class RotatingPanel(wx.Panel):
