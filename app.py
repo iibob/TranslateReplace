@@ -1,7 +1,6 @@
 import wx
 import os
 import json
-import keyboard
 import pyperclip
 import random
 from hashlib import md5
@@ -9,8 +8,9 @@ import requests
 import webbrowser
 import math
 import shutil
-import threading
-import time
+import keyboard
+from time import sleep
+from hotkey_manager import HotkeyManager
 
 
 def init_config_file():
@@ -55,8 +55,8 @@ def init_config_file():
     return icon_image, sponsor_image, dev_image, config_file
 
 
-# 打包程序后，修改 app.py 的文件名为程序名+版本号
-version = "v0.2.5"
+# 打包程序后，修改 app.exe 的文件名为程序名+版本号
+version = "v0.2.6"
 panel_size = (400, 240)
 panel_add_settings_size = (400, 608)
 about_size = (550, 775)
@@ -65,7 +65,7 @@ about = f"{version}  ·  帮助  ·  反馈  ·  赞助"
 about_title_text = f"翻译助手 {version}"
 about_developer = "iibob"
 about_email = 'iibobapp@gmail.com'
-third_party_library = "wxPython、keyboard、pyperclip、requests"
+third_party_library = "wxPython、keyboard、pynput、pyperclip、requests"
 help_url = "https://www.yuque.com/bo_o/box/pma7zu#PVjrc"
 project_url = "https://github.com/iibob/TranslateReplace"
 changelog_url = "https://www.yuque.com/bo_o/box/pma7zu#AGCCR"
@@ -79,8 +79,9 @@ class Config:
             default_config = {
                 "app_id": "",
                 "secret_key": "",
-                "shortcut": "ctrl+shift+F",
-                "auto_start": False
+                "shortcut": "ctrl shift f",
+                "auto_start": False,
+                "language": 0
             }
             with open(config_file, 'w') as f:
                 json.dump(default_config, f, indent=4)
@@ -139,24 +140,9 @@ class TranslatorFrame(wx.Frame):
         self.config = Config.load_config()
         self.is_active = False
 
-        def keyboard_loop():
-            while True:
-                if self.is_active:
-                    try:
-                        keyboard.remove_hotkey(self.config["shortcut"])
-                        # print('循环中，移除热键')
-                    except:
-                        pass
-                    keyboard.add_hotkey(self.config["shortcut"], self.perform_translation)
-                    # print('循环中，添加热键')
-                wx.MilliSleep(1000 * 10)
-                # wx.MilliSleep(1000)
-                # print(f"循环中，当前时间：{time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # 创建线程，间接保持键盘监听活跃
-        thread = threading.Thread(target=keyboard_loop)
-        thread.daemon = True
-        thread.start()
+        # 初始化热键管理器
+        self.hotkey_manager = HotkeyManager(self.perform_translation)
+        self.hotkey_manager.hotkey = self.config["shortcut"].split(' ')
 
         # 创建主面板
         self.panel = wx.Panel(self)
@@ -179,7 +165,7 @@ class TranslatorFrame(wx.Frame):
         self.auto_start.SetValue(self.config.get("auto_start", False))
         self.lang_choice_text = wx.StaticText(self.panel, label="译文语言:")
         self.lang_choice = wx.Choice(self.panel, choices=["自动检测", "中文", "繁体中文", "英语", "日语", "韩语", "法语", "西班牙语", "泰语", "阿拉伯语", "俄语", "葡萄牙语", "德语", "意大利语", "希腊语", "荷兰语", "波兰语", "保加利亚语", "爱沙尼亚语", "丹麦语", "芬兰语", "捷克语", "罗马尼亚语", "斯洛文尼亚语", "瑞典语", "匈牙利语", "越南语"])
-        self.lang_choice.SetSelection(0)
+        self.lang_choice.SetSelection(self.config.get("language", 0))
         option_box_sizer.Add(self.lang_choice_text,  0, wx.ALIGN_CENTER | wx.LEFT, 11)
         option_box_sizer.Add(self.lang_choice, 0, wx.ALIGN_CENTER | wx.LEFT, 8)
         option_box_sizer.Add(wx.StaticText(self.panel, label=""), 1, wx.Top | wx.BOTTOM, 30)
@@ -253,7 +239,7 @@ class TranslatorFrame(wx.Frame):
         self.ctrl_cb.SetValue("ctrl" in saved_shortcut)
         self.shift_cb.SetValue("shift" in saved_shortcut)
         self.alt_cb.SetValue("alt" in saved_shortcut)
-        key = saved_shortcut.split("+")[-1] if "+" in saved_shortcut else saved_shortcut
+        key = saved_shortcut.split()[-1]
         if key.isalpha():
             key = key.upper()
         self.key_input.SetValue(key)
@@ -295,6 +281,7 @@ class TranslatorFrame(wx.Frame):
         # 绑定事件
         self.start_btn.Bind(wx.EVT_BUTTON, self.toggle_active)
         self.settings_btn.Bind(wx.EVT_BUTTON, self.toggle_settings)
+        self.lang_choice.Bind(wx.EVT_CHOICE, self.on_lang_choice)
         baidu_save_btn.Bind(wx.EVT_BUTTON, self.save_baidu_settings)
         shortcut_save_btn.Bind(wx.EVT_BUTTON, self.save_shortcut)
         help_btn.Bind(wx.EVT_BUTTON, lambda evt: webbrowser.open(help_url))
@@ -321,6 +308,11 @@ class TranslatorFrame(wx.Frame):
             self.SetSize(panel_add_settings_size)
         self.panel.Layout()
 
+    def on_lang_choice(self, event):
+        index = self.lang_choice.GetSelection()
+        self.config["language"] = index
+        Config.save_config(self.config)
+
     def save_baidu_settings(self, event):
         app_id = self.app_id.GetValue().strip()
         secret_key = self.secret_key.GetValue().strip()
@@ -336,8 +328,9 @@ class TranslatorFrame(wx.Frame):
 
     def save_shortcut(self, event):
         key = self.key_input.GetValue().strip()
+
         for char in key:
-            if ord(char) < 32:
+            if not char.lower() in self.hotkey_manager.input_keys:
                 self.show_message("无效快捷键", 5000)
                 return
         if not key:
@@ -357,18 +350,15 @@ class TranslatorFrame(wx.Frame):
             return
 
         shortcut_parts.append(key.lower())
-        shortcut = "+".join(shortcut_parts)
-
-        try:
-            keyboard.remove_hotkey(self.config["shortcut"])
-        except:
-            pass
+        shortcut = " ".join(shortcut_parts)
 
         self.config["shortcut"] = shortcut
         Config.save_config(self.config)
+        self.hotkey_manager.hotkey = shortcut.split(' ')
 
         if self.is_active:
-            keyboard.add_hotkey(shortcut, self.perform_translation)
+            self.hotkey_manager.stop_()
+            self.hotkey_manager.start_()
 
         self.show_message("保存成功")
 
@@ -396,11 +386,11 @@ class TranslatorFrame(wx.Frame):
         if not self.is_active:
             self.start_btn.SetLabel("开启中")
             self.is_active = True
-            keyboard.add_hotkey(self.config["shortcut"], self.perform_translation)
+            self.hotkey_manager.start_()
         else:
             self.start_btn.SetLabel("开 启")
             self.is_active = False
-            keyboard.remove_hotkey(self.config["shortcut"])
+            self.hotkey_manager.stop_()
 
     def translate_text(self, text):
         app_id = self.config["app_id"]
@@ -438,18 +428,13 @@ class TranslatorFrame(wx.Frame):
             return False, None
 
     def perform_translation(self):
-        wx.CallAfter(self.show_message, "热键触发，开始执行翻译")
+        wx.CallAfter(self.show_message, "翻译中 ...")
+
         try:
             pyperclip.copy('')
-
-            # 等待快捷键释放
-            shortcut_parts = self.config["shortcut"].lower().split("+")
-            while any(keyboard.is_pressed(key) for key in shortcut_parts):
-                wx.MilliSleep(50)
-            wx.MilliSleep(100)
-
+            sleep(0.1)
             keyboard.send('ctrl+c')
-            wx.MilliSleep(100)
+            sleep(0.1)
 
             # 获取复制的文本
             copied_text = pyperclip.paste()
@@ -461,7 +446,7 @@ class TranslatorFrame(wx.Frame):
             success, translated_text = self.translate_text(copied_text)
             if success:
                 pyperclip.copy(translated_text)
-                wx.MilliSleep(100)
+                sleep(0.1)
                 keyboard.send('ctrl+v')
                 wx.CallAfter(self.show_message, "翻译完成")
             else:
@@ -497,6 +482,7 @@ class TranslatorFrame(wx.Frame):
         self.message_text.Hide()
         self.version_text.Show()
         self.panel.Layout()
+        self.message_timer.Stop()
         self.message_timer = None
 
     def about_click(self, event):
@@ -613,7 +599,7 @@ class TranslatorFrame(wx.Frame):
         dialog.Destroy()
 
     def on_close(self, event):
-        keyboard.unhook_all()
+        self.hotkey_manager.stop_()
         event.Skip()
 
 
